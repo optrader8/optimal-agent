@@ -6,12 +6,15 @@ import { IParser } from '../interfaces/IParser.js';
 import { ToolCall, ValidationResult } from '../types.js';
 import { ToolCallModel } from '../models/ToolCallModel.js';
 import { validateToolCall } from '../utils/validation.js';
+import { KoreanParser } from './KoreanParser.js';
 
 export class NaturalLanguageParser implements IParser {
   private availableTools: string[];
+  private koreanParser: KoreanParser;
 
   constructor(availableTools: string[]) {
     this.availableTools = availableTools;
+    this.koreanParser = new KoreanParser();
   }
 
   /**
@@ -20,7 +23,35 @@ export class NaturalLanguageParser implements IParser {
   parseToolCalls(text: string): ToolCall[] {
     const toolCalls: ToolCall[] = [];
 
-    // Try different parsing patterns
+    // Try Korean parser first if text is in Korean
+    if (this.koreanParser.isKorean(text)) {
+      const koreanParsers = [
+        this.koreanParser.parseReadFile.bind(this.koreanParser),
+        this.koreanParser.parseWriteFile.bind(this.koreanParser),
+        this.koreanParser.parseListDirectory.bind(this.koreanParser),
+        this.koreanParser.parseFileTree.bind(this.koreanParser),
+        this.koreanParser.parseGrepSearch.bind(this.koreanParser),
+        this.koreanParser.parseRunCommand.bind(this.koreanParser),
+        this.koreanParser.parseEditFile.bind(this.koreanParser),
+        this.koreanParser.parseFindSymbol.bind(this.koreanParser),
+        this.koreanParser.parseRunTests.bind(this.koreanParser),
+        this.koreanParser.parseGetDiagnostics.bind(this.koreanParser),
+      ];
+
+      for (const parser of koreanParsers) {
+        const result = parser(text);
+        if (result) {
+          toolCalls.push(result);
+        }
+      }
+
+      // If Korean parser found results, return them
+      if (toolCalls.length > 0) {
+        return toolCalls;
+      }
+    }
+
+    // Try English parsing patterns
     const parsers = [
       this.parseNodeEval.bind(this),
       this.parseReadFile.bind(this),
@@ -39,6 +70,9 @@ export class NaturalLanguageParser implements IParser {
       this.parseEditFile.bind(this),
       this.parseGetFileOutline.bind(this),
       this.parseApplyDiff.bind(this),
+      this.parseRunTests.bind(this),
+      this.parseGetDiagnostics.bind(this),
+      this.parseFindSymbol.bind(this),
     ];
 
     for (const parser of parsers) {
@@ -479,6 +513,125 @@ export class NaturalLanguageParser implements IParser {
             match[0]
           );
         }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse run_tests patterns
+   */
+  private parseRunTests(text: string): ToolCall | null {
+    const patterns = [
+      /(?:run|execute)\s+(?:the\s+)?tests?/i,
+      /test\s+(?:the\s+)?(?:code|project|application)/i,
+      /npm\s+(?:run\s+)?test/i,
+      /(?:run|execute)\s+(?:jest|mocha|vitest|pytest)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: Record<string, any> = {};
+
+        // Extract test path if mentioned
+        const pathMatch = text.match(/(?:tests?|spec)\s+(?:in|for|at)\s+['"`]?([^'"`\s]+)['"`]?/i);
+        if (pathMatch) {
+          params.path = pathMatch[1];
+        }
+
+        // Check for coverage request
+        if (text.match(/with\s+coverage|--coverage/i)) {
+          params.coverage = true;
+        }
+
+        return new ToolCallModel('run_tests', params, 0.8, match[0]);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse get_diagnostics patterns
+   */
+  private parseGetDiagnostics(text: string): ToolCall | null {
+    const patterns = [
+      /(?:run|get|show|check)\s+(?:code\s+)?(?:diagnostics?|linting|type\s*check)/i,
+      /(?:lint|check)\s+(?:the\s+)?(?:code|files?)/i,
+      /(?:run|execute)\s+(?:eslint|tsc|type\s*script)/i,
+      /check\s+for\s+(?:errors?|issues?|problems?)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: Record<string, any> = {};
+
+        // Extract diagnostic type
+        if (text.match(/lint|eslint/i)) {
+          params.type = 'lint';
+        } else if (text.match(/type|tsc|typescript/i)) {
+          params.type = 'typecheck';
+        }
+
+        // Check for auto-fix request
+        if (text.match(/fix|--fix/i)) {
+          params.fix = true;
+        }
+
+        // Extract path if mentioned
+        const pathMatch = text.match(/(?:in|for|at)\s+['"`]?([^'"`\s]+)['"`]?/i);
+        if (pathMatch && !pathMatch[1].match(/errors?|issues?|problems?/i)) {
+          params.path = pathMatch[1];
+        }
+
+        return new ToolCallModel('get_diagnostics', params, 0.8, match[0]);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse find_symbol patterns
+   */
+  private parseFindSymbol(text: string): ToolCall | null {
+    const patterns = [
+      /(?:find|search|locate)\s+(?:the\s+)?(?:function|class|interface|type|variable|symbol)s?\s+(?:named\s+)?['"`]?([^'"`\s]+)['"`]?/i,
+      /(?:where\s+is|show me)\s+(?:the\s+)?(?:function|class|interface|type)s?\s+(?:named\s+)?['"`]?([^'"`\s]+)['"`]?/i,
+      /(?:list|show)\s+all\s+(?:functions?|classes?|interfaces?|types?)\s+(?:named\s+)?['"`]?([^'"`\s]+)['"`]?/i,
+      /(?:find|search)\s+(?:all\s+)?['"`]?([^'"`\s]+)['"`]?\s+(?:functions?|classes?|interfaces?)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: Record<string, any> = {
+          name: match[1],
+        };
+
+        // Detect symbol kind
+        if (text.match(/\bfunction/i)) {
+          params.kind = 'function';
+        } else if (text.match(/\bclass/i)) {
+          params.kind = 'class';
+        } else if (text.match(/\binterface/i)) {
+          params.kind = 'interface';
+        } else if (text.match(/\btype\b/i)) {
+          params.kind = 'type';
+        } else if (text.match(/\bvariable/i)) {
+          params.kind = 'variable';
+        }
+
+        // Extract directory if mentioned
+        const dirMatch = text.match(/(?:in|from|under)\s+(?:directory\s+)?['"`]?([^'"`\s]+)['"`]?/i);
+        if (dirMatch) {
+          params.directory = dirMatch[1];
+        }
+
+        return new ToolCallModel('find_symbol', params, 0.85, match[0]);
       }
     }
 

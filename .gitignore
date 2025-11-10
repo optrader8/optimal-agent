@@ -6,3 +6,6 @@ dist/
 coverage/
 .vscode/
 .idea/
+.sessions/
+logs/
+.backups/
