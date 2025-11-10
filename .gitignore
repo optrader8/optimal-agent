@@ -8,3 +8,4 @@ coverage/
 .idea/
 .sessions/
 logs/
+.backups/

@@ -41,6 +41,7 @@ import { GetDiagnosticsTool } from './tools/GetDiagnosticsTool.js';
 import { defaultModelConfig, defaultSystemConfig } from './config.js';
 import { ErrorHandler, globalErrorHandler } from './errors/ErrorHandler.js';
 import { HealthMonitor } from './errors/HealthMonitor.js';
+import { globalBackupManager } from './utils/backup-manager.js';
 import readline from 'readline';
 import chalk from 'chalk';
 
@@ -159,7 +160,7 @@ async function main() {
   });
 
   console.log(chalk.gray('Type your message or "exit" to quit.'));
-  console.log(chalk.gray('Special commands: /health, /errors, /clear-errors\n'));
+  console.log(chalk.gray('Special commands: /health, /errors, /clear-errors, /history, /backups, /rollback <file>\n'));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -205,6 +206,66 @@ async function main() {
     if (input.toLowerCase() === '/clear-errors') {
       errorHandler.clearLogs();
       console.log(chalk.green('\n✓ Error logs cleared\n'));
+      rl.prompt();
+      return;
+    }
+
+    // Show change history
+    if (input.toLowerCase() === '/history') {
+      const history = globalBackupManager.getAllHistory(20);
+      if (history.length === 0) {
+        console.log(chalk.green('\n✓ No change history\n'));
+      } else {
+        console.log(chalk.yellow(`\nChange History (last ${history.length}):\n`));
+        history.reverse().forEach((change, idx) => {
+          const status = change.success ? chalk.green('✓') : chalk.red('✗');
+          console.log(`${status} ${change.timestamp.toLocaleString()}`);
+          console.log(`   File: ${change.filePath}`);
+          console.log(`   Operation: ${change.operation}`);
+          if (change.backupPath) {
+            console.log(`   Backup: ${change.backupPath}`);
+          }
+          console.log();
+        });
+      }
+      rl.prompt();
+      return;
+    }
+
+    // List backups
+    if (input.toLowerCase() === '/backups') {
+      const backups = await globalBackupManager.listBackups();
+      if (backups.length === 0) {
+        console.log(chalk.green('\n✓ No backups available\n'));
+      } else {
+        console.log(chalk.yellow(`\nAvailable Backups (${backups.length}):\n`));
+        backups.slice(-10).forEach((backup, idx) => {
+          console.log(`${idx + 1}. ${backup}`);
+        });
+        console.log(chalk.gray('\nUse /rollback <filename> to restore\n'));
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Rollback file
+    if (input.toLowerCase().startsWith('/rollback ')) {
+      const filePath = input.substring(10).trim();
+      if (!filePath) {
+        console.log(chalk.red('\n❌ Usage: /rollback <file-path>\n'));
+        rl.prompt();
+        return;
+      }
+
+      console.log(chalk.yellow(`\nRolling back ${filePath}...\n`));
+      const success = await globalBackupManager.rollbackFile(filePath);
+
+      if (success) {
+        console.log(chalk.green(`✓ Successfully rolled back ${filePath}\n`));
+      } else {
+        console.log(chalk.red(`❌ Failed to rollback ${filePath}\n`));
+      }
+
       rl.prompt();
       return;
     }
