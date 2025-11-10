@@ -39,6 +39,8 @@ import { RunTestsTool } from './tools/RunTestsTool.js';
 import { GetDiagnosticsTool } from './tools/GetDiagnosticsTool.js';
 
 import { defaultModelConfig, defaultSystemConfig } from './config.js';
+import { ErrorHandler, globalErrorHandler } from './errors/ErrorHandler.js';
+import { HealthMonitor } from './errors/HealthMonitor.js';
 import readline from 'readline';
 import chalk from 'chalk';
 
@@ -68,8 +70,12 @@ async function main() {
       })
     : LocalModelFactory.create('ollama');
 
+  // Initialize error handling
+  const errorHandler = globalErrorHandler;
+  const healthMonitor = new HealthMonitor(errorHandler);
+
   const contextManager = new ContextManager();
-  const toolExecutor = new ToolExecutor();
+  const toolExecutor = new ToolExecutor(errorHandler);
 
   // Register all tools
   console.log(chalk.yellow('Registering tools...'));
@@ -152,18 +158,55 @@ async function main() {
     prompt: chalk.bold.blue('You: '),
   });
 
-  console.log(chalk.gray('Type your message or "exit" to quit.\n'));
+  console.log(chalk.gray('Type your message or "exit" to quit.'));
+  console.log(chalk.gray('Special commands: /health, /errors, /clear-errors\n'));
   rl.prompt();
 
   rl.on('line', async (line) => {
     const input = line.trim();
 
+    // Exit command
     if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
       console.log(chalk.yellow('\nEnding session...'));
       await conversationManager.endSession(sessionId);
       console.log(chalk.green('Goodbye! 👋\n'));
       rl.close();
       process.exit(0);
+    }
+
+    // Health check command
+    if (input.toLowerCase() === '/health') {
+      console.log(chalk.yellow('\nRunning health check...\n'));
+      const healthStatus = await healthMonitor.runHealthChecks();
+      console.log(healthMonitor.formatHealthStatus(healthStatus));
+      rl.prompt();
+      return;
+    }
+
+    // Show errors command
+    if (input.toLowerCase() === '/errors') {
+      const recentErrors = errorHandler.getRecentErrors(10);
+      if (recentErrors.length === 0) {
+        console.log(chalk.green('\n✓ No recent errors\n'));
+      } else {
+        console.log(chalk.yellow(`\nRecent Errors (${recentErrors.length}):\n`));
+        recentErrors.forEach((err, idx) => {
+          console.log(`${idx + 1}. [${err.category}] ${err.message}`);
+          console.log(`   Time: ${err.timestamp.toLocaleString()}`);
+          console.log(`   Severity: ${err.severity}`);
+          console.log();
+        });
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Clear errors command
+    if (input.toLowerCase() === '/clear-errors') {
+      errorHandler.clearLogs();
+      console.log(chalk.green('\n✓ Error logs cleared\n'));
+      rl.prompt();
+      return;
     }
 
     if (!input) {
@@ -177,7 +220,9 @@ async function main() {
       console.log(chalk.green('Assistant:'), response);
       console.log();
     } catch (error: any) {
-      console.error(chalk.red('Error:'), error.message);
+      // Use error handler to format and log error
+      await errorHandler.logError(error, { sessionId, input });
+      console.error(chalk.red('\n' + errorHandler.formatUserError(error)));
       console.log();
     }
 

@@ -1,21 +1,35 @@
 /**
- * Tool Executor implementation
+ * Tool Executor implementation with error handling
  */
 
 import { IToolExecutor } from '../interfaces/IToolExecutor.js';
 import { ITool } from '../interfaces/ITool.js';
 import { ToolCall, ToolResult } from '../types.js';
+import { ErrorHandler } from '../errors/ErrorHandler.js';
+import { ToolExecutionError } from '../errors/ErrorTypes.js';
 
 export class ToolExecutor implements IToolExecutor {
   private tools: Map<string, ITool> = new Map();
+  private errorHandler: ErrorHandler;
+
+  constructor(errorHandler?: ErrorHandler) {
+    this.errorHandler = errorHandler || new ErrorHandler();
+  }
 
   /**
-   * Execute a tool call
+   * Execute a tool call with error handling and retry
    */
   async executeTool(toolCall: ToolCall): Promise<ToolResult> {
     const tool = this.tools.get(toolCall.toolName);
 
     if (!tool) {
+      const error = new ToolExecutionError(
+        `Unknown tool: ${toolCall.toolName}`,
+        undefined,
+        { toolName: toolCall.toolName }
+      );
+      await this.errorHandler.logError(error);
+
       return {
         success: false,
         output: '',
@@ -25,12 +39,28 @@ export class ToolExecutor implements IToolExecutor {
     }
 
     try {
-      return await tool.execute(toolCall.parameters);
+      // Use error handler's retry mechanism for tool execution
+      const result = await this.errorHandler.handleWithRetry(
+        () => tool.execute(toolCall.parameters),
+        { maxRetries: 2, initialDelayMs: 500, exponentialBackoff: true },
+        { toolName: toolCall.toolName, parameters: toolCall.parameters }
+      );
+
+      return result;
     } catch (error: any) {
+      // Log the error
+      const toolError = new ToolExecutionError(
+        `Tool '${toolCall.toolName}' failed: ${error.message}`,
+        error,
+        { toolName: toolCall.toolName, parameters: toolCall.parameters }
+      );
+      await this.errorHandler.logError(toolError);
+
+      // Return formatted error
       return {
         success: false,
         output: '',
-        errorMessage: `Tool execution failed: ${error.message}`,
+        errorMessage: this.errorHandler.formatUserError(toolError),
         executionTime: 0,
       };
     }
