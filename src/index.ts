@@ -48,6 +48,8 @@ import { globalBackupManager } from './utils/backup-manager.js';
 import { globalConfigManager } from './config/ConfigManager.js';
 import { globalSystemChecker } from './config/SystemChecker.js';
 import { globalFileCache, globalSearchCache } from './performance/Cache.js';
+import { OutputFormatter } from './ui/OutputFormatter.js';
+import { globalProgress } from './ui/ProgressIndicator.js';
 import readline from 'readline';
 import chalk from 'chalk';
 
@@ -83,6 +85,7 @@ async function main() {
 
   const contextManager = new ContextManager();
   const toolExecutor = new ToolExecutor(errorHandler);
+  const outputFormatter = new OutputFormatter();
 
   // Register all tools
   console.log(chalk.yellow('Registering tools...'));
@@ -529,11 +532,24 @@ async function main() {
     }
 
     try {
-      console.log(chalk.gray('\nThinking...\n'));
+      // Show progress indicator
+      globalProgress.start({ text: 'Thinking...', color: 'cyan' });
+
       const response = await conversationManager.processMessage(sessionId, input);
-      console.log(chalk.green('Assistant:'), response);
+
+      // Stop progress indicator
+      globalProgress.succeed('Response generated');
+      console.log();
+
+      // Format and display response with syntax highlighting
+      console.log(chalk.green.bold('Assistant:'));
+      const formattedResponse = outputFormatter.extractAndFormatCodeBlocks(response);
+      console.log(formattedResponse);
       console.log();
     } catch (error: any) {
+      // Stop progress indicator on error
+      globalProgress.fail('Error occurred');
+
       // Use error handler to format and log error
       await errorHandler.logError(error, { sessionId, input });
       console.error(chalk.red('\n' + errorHandler.formatUserError(error)));
