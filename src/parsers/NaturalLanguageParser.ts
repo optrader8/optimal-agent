@@ -6,12 +6,15 @@ import { IParser } from '../interfaces/IParser.js';
 import { ToolCall, ValidationResult } from '../types.js';
 import { ToolCallModel } from '../models/ToolCallModel.js';
 import { validateToolCall } from '../utils/validation.js';
+import { KoreanParser } from './KoreanParser.js';
 
 export class NaturalLanguageParser implements IParser {
   private availableTools: string[];
+  private koreanParser: KoreanParser;
 
   constructor(availableTools: string[]) {
     this.availableTools = availableTools;
+    this.koreanParser = new KoreanParser();
   }
 
   /**
@@ -20,7 +23,35 @@ export class NaturalLanguageParser implements IParser {
   parseToolCalls(text: string): ToolCall[] {
     const toolCalls: ToolCall[] = [];
 
-    // Try different parsing patterns
+    // Try Korean parser first if text is in Korean
+    if (this.koreanParser.isKorean(text)) {
+      const koreanParsers = [
+        this.koreanParser.parseReadFile.bind(this.koreanParser),
+        this.koreanParser.parseWriteFile.bind(this.koreanParser),
+        this.koreanParser.parseListDirectory.bind(this.koreanParser),
+        this.koreanParser.parseFileTree.bind(this.koreanParser),
+        this.koreanParser.parseGrepSearch.bind(this.koreanParser),
+        this.koreanParser.parseRunCommand.bind(this.koreanParser),
+        this.koreanParser.parseEditFile.bind(this.koreanParser),
+        this.koreanParser.parseFindSymbol.bind(this.koreanParser),
+        this.koreanParser.parseRunTests.bind(this.koreanParser),
+        this.koreanParser.parseGetDiagnostics.bind(this.koreanParser),
+      ];
+
+      for (const parser of koreanParsers) {
+        const result = parser(text);
+        if (result) {
+          toolCalls.push(result);
+        }
+      }
+
+      // If Korean parser found results, return them
+      if (toolCalls.length > 0) {
+        return toolCalls;
+      }
+    }
+
+    // Try English parsing patterns
     const parsers = [
       this.parseNodeEval.bind(this),
       this.parseReadFile.bind(this),
