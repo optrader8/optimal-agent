@@ -41,6 +41,7 @@ export class NaturalLanguageParser implements IParser {
       this.parseApplyDiff.bind(this),
       this.parseRunTests.bind(this),
       this.parseGetDiagnostics.bind(this),
+      this.parseFindSymbol.bind(this),
     ];
 
     for (const parser of parsers) {
@@ -556,6 +557,50 @@ export class NaturalLanguageParser implements IParser {
         }
 
         return new ToolCallModel('get_diagnostics', params, 0.8, match[0]);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse find_symbol patterns
+   */
+  private parseFindSymbol(text: string): ToolCall | null {
+    const patterns = [
+      /(?:find|search|locate)\s+(?:the\s+)?(?:function|class|interface|type|variable|symbol)s?\s+(?:named\s+)?['"`]?([^'"`\s]+)['"`]?/i,
+      /(?:where\s+is|show me)\s+(?:the\s+)?(?:function|class|interface|type)s?\s+(?:named\s+)?['"`]?([^'"`\s]+)['"`]?/i,
+      /(?:list|show)\s+all\s+(?:functions?|classes?|interfaces?|types?)\s+(?:named\s+)?['"`]?([^'"`\s]+)['"`]?/i,
+      /(?:find|search)\s+(?:all\s+)?['"`]?([^'"`\s]+)['"`]?\s+(?:functions?|classes?|interfaces?)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: Record<string, any> = {
+          name: match[1],
+        };
+
+        // Detect symbol kind
+        if (text.match(/\bfunction/i)) {
+          params.kind = 'function';
+        } else if (text.match(/\bclass/i)) {
+          params.kind = 'class';
+        } else if (text.match(/\binterface/i)) {
+          params.kind = 'interface';
+        } else if (text.match(/\btype\b/i)) {
+          params.kind = 'type';
+        } else if (text.match(/\bvariable/i)) {
+          params.kind = 'variable';
+        }
+
+        // Extract directory if mentioned
+        const dirMatch = text.match(/(?:in|from|under)\s+(?:directory\s+)?['"`]?([^'"`\s]+)['"`]?/i);
+        if (dirMatch) {
+          params.directory = dirMatch[1];
+        }
+
+        return new ToolCallModel('find_symbol', params, 0.85, match[0]);
       }
     }
 

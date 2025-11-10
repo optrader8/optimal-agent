@@ -38,6 +38,9 @@ import { NodeEvalTool } from './tools/NodeEvalTool.js';
 import { RunTestsTool } from './tools/RunTestsTool.js';
 import { GetDiagnosticsTool } from './tools/GetDiagnosticsTool.js';
 
+// Code analysis tools
+import { FindSymbolTool } from './tools/FindSymbolTool.js';
+
 import { defaultModelConfig, defaultSystemConfig } from './config.js';
 import { ErrorHandler, globalErrorHandler } from './errors/ErrorHandler.js';
 import { HealthMonitor } from './errors/HealthMonitor.js';
@@ -112,6 +115,9 @@ async function main() {
   // Testing and diagnostics
   toolExecutor.registerTool(new RunTestsTool());
   toolExecutor.registerTool(new GetDiagnosticsTool());
+
+  // Code analysis
+  toolExecutor.registerTool(new FindSymbolTool());
 
   console.log(
     chalk.green(`✓ Registered ${toolExecutor.getAvailableTools().length} tools`)
