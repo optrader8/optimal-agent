@@ -42,6 +42,8 @@ import { defaultModelConfig, defaultSystemConfig } from './config.js';
 import { ErrorHandler, globalErrorHandler } from './errors/ErrorHandler.js';
 import { HealthMonitor } from './errors/HealthMonitor.js';
 import { globalBackupManager } from './utils/backup-manager.js';
+import { globalConfigManager } from './config/ConfigManager.js';
+import { globalSystemChecker } from './config/SystemChecker.js';
 import readline from 'readline';
 import chalk from 'chalk';
 
@@ -161,7 +163,8 @@ async function main() {
 
   console.log(chalk.gray('Type your message or "exit" to quit.'));
   console.log(chalk.gray('Special commands: /health, /errors, /clear-errors, /history, /backups, /rollback <file>'));
-  console.log(chalk.gray('Monitoring: /stats [tool], /executions, /slowest, /failures, /active\n'));
+  console.log(chalk.gray('Monitoring: /stats [tool], /executions, /slowest, /failures, /active'));
+  console.log(chalk.gray('Configuration: /config, /models, /tools, /check-system\n'));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -386,6 +389,101 @@ async function main() {
         });
         console.log(chalk.gray('\nUse /cancel <execution_id> to cancel an execution\n'));
       }
+      rl.prompt();
+      return;
+    }
+
+    // Show configuration
+    if (input.toLowerCase() === '/config') {
+      try {
+        await globalConfigManager.loadConfig();
+        const config = globalConfigManager.getConfig();
+
+        console.log(chalk.yellow('\n⚙️  Current Configuration:\n'));
+        console.log(`Config file: ${globalConfigManager.getConfigPath()}`);
+        console.log(`Version: ${config.version}`);
+        console.log(`\nDefault Model: ${config.system.defaultModel}`);
+        console.log(`Execution Timeout: ${config.system.execution.defaultTimeout}ms`);
+        console.log(`Track Resources: ${config.system.execution.trackResources}`);
+        console.log(`Backup Enabled: ${config.system.backup.enabled}`);
+        console.log(`\nUse /models to see available models`);
+        console.log(`Use /tools to see tool status\n`);
+      } catch (error: any) {
+        console.log(chalk.red(`\n❌ Failed to load configuration: ${error.message}\n`));
+        console.log(chalk.gray('Run: npm run setup\n'));
+      }
+      rl.prompt();
+      return;
+    }
+
+    // List models
+    if (input.toLowerCase() === '/models') {
+      try {
+        await globalConfigManager.loadConfig();
+        const config = globalConfigManager.getConfig();
+        const models = Object.entries(config.system.models);
+
+        console.log(chalk.yellow('\n🤖 Available Models:\n'));
+        models.forEach(([name, model]) => {
+          const isDefault = name === config.system.defaultModel;
+          const marker = isDefault ? chalk.green('★') : ' ';
+          console.log(`${marker} ${name}`);
+          console.log(`   Provider: ${model.provider}`);
+          console.log(`   Model: ${model.modelName}`);
+          if (model.baseUrl) {
+            console.log(`   Base URL: ${model.baseUrl}`);
+          }
+          console.log();
+        });
+        console.log(chalk.gray('★ = Default model\n'));
+      } catch (error: any) {
+        console.log(chalk.red(`\n❌ Failed to load configuration: ${error.message}\n`));
+      }
+      rl.prompt();
+      return;
+    }
+
+    // List tools
+    if (input.toLowerCase() === '/tools') {
+      try {
+        await globalConfigManager.loadConfig();
+        const config = globalConfigManager.getConfig();
+        const tools = Object.entries(config.system.tools);
+
+        const enabled = tools.filter(([_, t]) => t.enabled);
+        const disabled = tools.filter(([_, t]) => !t.enabled);
+
+        console.log(chalk.yellow('\n🔧 Tool Status:\n'));
+
+        if (enabled.length > 0) {
+          console.log(chalk.green('Enabled Tools:'));
+          enabled.forEach(([name, tool]) => {
+            console.log(`  ✓ ${name}${tool.timeout ? ` (timeout: ${tool.timeout}ms)` : ''}`);
+          });
+          console.log();
+        }
+
+        if (disabled.length > 0) {
+          console.log(chalk.red('Disabled Tools:'));
+          disabled.forEach(([name, _]) => {
+            console.log(`  ✗ ${name}`);
+          });
+          console.log();
+        }
+
+        console.log(chalk.gray(`Total: ${enabled.length} enabled, ${disabled.length} disabled\n`));
+      } catch (error: any) {
+        console.log(chalk.red(`\n❌ Failed to load configuration: ${error.message}\n`));
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Check system requirements
+    if (input.toLowerCase() === '/check-system') {
+      console.log(chalk.yellow('\nChecking system requirements...\n'));
+      const requirements = await globalSystemChecker.checkSystemRequirements();
+      console.log(globalSystemChecker.formatReport(requirements));
       rl.prompt();
       return;
     }
