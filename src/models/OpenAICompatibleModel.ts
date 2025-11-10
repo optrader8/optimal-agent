@@ -5,6 +5,7 @@
 
 import { ILocalModel } from '../interfaces/ILocalModel.js';
 import { ModelConfig, ModelInfo, Context } from '../types.js';
+import axios from 'axios';
 
 export class OpenAICompatibleModel implements ILocalModel {
   private currentModel: string | null = null;
@@ -23,19 +24,14 @@ export class OpenAICompatibleModel implements ILocalModel {
   async loadModel(modelName: string, config: ModelConfig): Promise<boolean> {
     try {
       // Test connection by listing models
-      const response = await fetch(`${this.baseUrl}/v1/models`, {
+      const response = await axios.get(`${this.baseUrl}/v1/models`, {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
         },
+        // axios automatically uses https_proxy environment variable
       });
 
-      if (!response.ok) {
-        console.error(`Failed to connect: ${response.statusText}`);
-        return false;
-      }
-
-      const data: any = await response.json();
-      console.log('Available models:', data.data?.map((m: any) => m.id) || []);
+      console.log('Available models:', response.data.data?.map((m: any) => m.id) || []);
 
       this.currentModel = modelName;
       this.config = config;
@@ -71,29 +67,26 @@ export class OpenAICompatibleModel implements ILocalModel {
       console.log(`Model: ${this.currentModel}`);
       console.log(`Messages: ${messages.length}`);
 
-      // Call OpenAI-compatible API
-      const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
+      // Call OpenAI-compatible API using axios (supports proxy)
+      const response = await axios.post(
+        `${this.baseUrl}/v1/chat/completions`,
+        {
           model: this.currentModel,
           messages,
           temperature: this.config.temperature,
           max_tokens: this.config.maxTokens,
           stream: false,
-        }),
-      });
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+        }
+      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error (${response.status}): ${errorText}`);
-      }
-
-      const data: any = await response.json();
       console.log('[API Response] Received');
+      const data: any = response.data;
 
       if (!data.choices || data.choices.length === 0) {
         throw new Error('No response from model');
