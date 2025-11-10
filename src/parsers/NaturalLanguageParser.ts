@@ -22,13 +22,23 @@ export class NaturalLanguageParser implements IParser {
 
     // Try different parsing patterns
     const parsers = [
+      this.parseNodeEval.bind(this),
       this.parseReadFile.bind(this),
       this.parseWriteFile.bind(this),
       this.parseListDirectory.bind(this),
+      this.parseFileTree.bind(this),
+      this.parseFileStat.bind(this),
       this.parseGrepSearch.bind(this),
+      this.parseRipgrep.bind(this),
+      this.parseFind.bind(this),
+      this.parseAwk.bind(this),
+      this.parseSed.bind(this),
+      this.parseWc.bind(this),
       this.parseRunCommand.bind(this),
       this.parseFindDefinition.bind(this),
       this.parseEditFile.bind(this),
+      this.parseGetFileOutline.bind(this),
+      this.parseApplyDiff.bind(this),
     ];
 
     for (const parser of parsers) {
@@ -212,6 +222,251 @@ export class NaturalLanguageParser implements IParser {
           0.7,
           match[0]
         );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse Node.js code evaluation patterns
+   */
+  private parseNodeEval(text: string): ToolCall | null {
+    const patterns = [
+      /(?:execute|run|eval)?\s*fs\.(\w+)\s*\([^)]*\)/i,
+      /(?:execute|run|eval)?\s*path\.(\w+)\s*\([^)]*\)/i,
+      /(?:execute|run|eval)?\s*(?:await\s+)?(\w+\.\w+\([^)]*\))/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        // Extract the full code snippet
+        const codeMatch = text.match(/```(?:javascript|js|typescript|ts)?\n?([\s\S]*?)```/);
+        const code = codeMatch ? codeMatch[1] : match[0];
+
+        return new ToolCallModel(
+          'node_eval',
+          { code: code.trim() },
+          0.85,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse file_tree patterns
+   */
+  private parseFileTree(text: string): ToolCall | null {
+    const patterns = [
+      /(?:show|display|get)\s+(?:the\s+)?(?:file\s+)?tree\s+(?:of|for|at)?\s*['"`]?([^'"`\n]*?)['"`]?(?:\s|$|\.)/i,
+      /(?:tree|structure)\s+(?:of\s+)?['"`]?([^'"`\n]*?)['"`]?(?:\s|$|\.)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'file_tree',
+          { path: match[1]?.trim() || '.', depth: 3 },
+          0.75,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse file_stat patterns
+   */
+  private parseFileStat(text: string): ToolCall | null {
+    const patterns = [
+      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /fs\.stat\s*\(\s*['"`]([^'"`]+?)['"`]\s*\)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'file_stat',
+          { path: match[1].trim() },
+          0.85,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse ripgrep patterns
+   */
+  private parseRipgrep(text: string): ToolCall | null {
+    const patterns = [
+      /(?:ripgrep|rg)\s+['"`]([^'"`]+?)['"`]/i,
+      /search\s+(?:with\s+)?(?:ripgrep|rg)\s+(?:for\s+)?['"`]([^'"`]+?)['"`]/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'ripgrep',
+          { pattern: match[1].trim(), path: '.' },
+          0.8,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse find patterns
+   */
+  private parseFind(text: string): ToolCall | null {
+    const patterns = [
+      /find\s+(?:files?\s+)?(?:named|matching)\s+['"`]([^'"`]+?)['"`]/i,
+      /(?:locate|search for)\s+files?\s+(?:named|called)\s+['"`]([^'"`]+?)['"`]/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'find',
+          { name: match[1].trim(), path: '.' },
+          0.75,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse awk patterns
+   */
+  private parseAwk(text: string): ToolCall | null {
+    const patterns = [
+      /awk\s+['"`]([^'"`]+?)['"`](?:\s+['"`]([^'"`]+?)['"`])?/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: any = { script: match[1].trim() };
+        if (match[2]) {
+          params.file = match[2].trim();
+        }
+        return new ToolCallModel('awk', params, 0.8, match[0]);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse sed patterns
+   */
+  private parseSed(text: string): ToolCall | null {
+    const patterns = [
+      /sed\s+['"`]([^'"`]+?)['"`]\s+['"`]([^'"`]+?)['"`]/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'sed',
+          { script: match[1].trim(), file: match[2].trim() },
+          0.8,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse wc patterns
+   */
+  private parseWc(text: string): ToolCall | null {
+    const patterns = [
+      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /wc\s+(?:-[lwc]\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'wc',
+          { path: match[1].trim() },
+          0.75,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse get_file_outline patterns
+   */
+  private parseGetFileOutline(text: string): ToolCall | null {
+    const patterns = [
+      /(?:get|show|display)\s+(?:the\s+)?(?:file\s+)?(?:outline|structure|summary)\s+(?:of|for)\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:outline|summarize)\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return new ToolCallModel(
+          'get_file_outline',
+          { path: match[1].trim() },
+          0.75,
+          match[0]
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse apply_diff patterns
+   */
+  private parseApplyDiff(text: string): ToolCall | null {
+    const patterns = [
+      /apply\s+(?:the\s+)?(?:diff|patch)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        // Try to extract diff content from code block
+        const diffMatch = text.match(/```(?:diff)?\n?([\s\S]*?)```/);
+        if (diffMatch) {
+          return new ToolCallModel(
+            'apply_diff',
+            { diff: diffMatch[1].trim(), targetPath: '.' },
+            0.8,
+            match[0]
+          );
+        }
       }
     }
 
