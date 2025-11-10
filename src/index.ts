@@ -52,6 +52,7 @@ import { OutputFormatter } from './ui/OutputFormatter.js';
 import { globalProgress } from './ui/ProgressIndicator.js';
 import readline from 'readline';
 import chalk from 'chalk';
+import path from 'path';
 
 async function main() {
   console.log(chalk.bold.cyan('🤖 Optimal Agent - Local Coding Assistant'));
@@ -175,7 +176,8 @@ async function main() {
   console.log(chalk.gray('Special commands: /health, /errors, /clear-errors, /history, /backups, /rollback <file>'));
   console.log(chalk.gray('Monitoring: /stats [tool], /executions, /slowest, /failures, /active'));
   console.log(chalk.gray('Configuration: /config, /models, /tools, /check-system'));
-  console.log(chalk.gray('Performance: /cache-stats, /clear-cache\n'));
+  console.log(chalk.gray('Performance: /cache-stats, /clear-cache'));
+  console.log(chalk.gray('File Tracking: /working-set, /suggest [file], /files, /central\n'));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -522,6 +524,102 @@ async function main() {
       globalFileCache.clear();
       globalSearchCache.clear();
       console.log(chalk.green('\n✓ All caches cleared\n'));
+      rl.prompt();
+      return;
+    }
+
+    // Show working set
+    if (input.toLowerCase() === '/working-set') {
+      const workingSet = contextManager.getWorkingSet();
+      console.log(chalk.yellow(`\n📁 Current Working Set (${workingSet.length} files):\n`));
+
+      if (workingSet.length === 0) {
+        console.log(chalk.gray('  No files in working set yet\n'));
+      } else {
+        workingSet.forEach((file, idx) => {
+          console.log(`  ${idx + 1}. ${path.relative(process.cwd(), file)}`);
+        });
+        console.log();
+      }
+
+      rl.prompt();
+      return;
+    }
+
+    // Suggest related files
+    if (input.toLowerCase().startsWith('/suggest')) {
+      const parts = input.split(' ');
+      const targetFile = parts[1]?.trim();
+
+      const suggestions = await contextManager.getFileSuggestions(sessionId, targetFile, 10);
+
+      console.log(chalk.yellow(`\n💡 File Suggestions:\n`));
+
+      if (suggestions.length === 0) {
+        console.log(chalk.gray('  No suggestions available yet\n'));
+      } else {
+        suggestions.forEach((suggestion, idx) => {
+          const confidence = (suggestion.confidence * 100).toFixed(0);
+          console.log(`  ${idx + 1}. ${path.relative(process.cwd(), suggestion.filePath)}`);
+          console.log(chalk.gray(`     ${suggestion.reason} (${confidence}% confidence)`));
+        });
+        console.log();
+      }
+
+      rl.prompt();
+      return;
+    }
+
+    // Show most accessed files
+    if (input.toLowerCase() === '/files') {
+      const accessed = contextManager.getMostAccessedFiles(15);
+      const recent = contextManager.getRecentlyAccessedFiles(10);
+
+      console.log(chalk.yellow('\n📊 File Access Statistics:\n'));
+
+      console.log(chalk.cyan('Most Accessed:'));
+      if (accessed.length === 0) {
+        console.log(chalk.gray('  No files accessed yet\n'));
+      } else {
+        accessed.slice(0, 10).forEach((info, idx) => {
+          console.log(`  ${idx + 1}. ${path.relative(process.cwd(), info.filePath)}`);
+          console.log(chalk.gray(`     Accessed ${info.accessCount} times, last: ${info.lastAccessed.toLocaleString()}`));
+        });
+        console.log();
+      }
+
+      console.log(chalk.cyan('Recently Accessed:'));
+      recent.slice(0, 5).forEach((info, idx) => {
+        console.log(`  ${idx + 1}. ${path.relative(process.cwd(), info.filePath)}`);
+        console.log(chalk.gray(`     ${info.lastAccessed.toLocaleString()}`));
+      });
+      console.log();
+
+      rl.prompt();
+      return;
+    }
+
+    // Show central files in dependency graph
+    if (input.toLowerCase() === '/central') {
+      const central = contextManager.getCentralFiles(10);
+      const stats = contextManager.getFileTrackerStats();
+
+      console.log(chalk.yellow('\n🔗 Dependency Graph:\n'));
+      console.log(chalk.gray(`Total files tracked: ${stats.totalFilesTracked}`));
+      console.log(chalk.gray(`Dependency graph size: ${stats.dependencyGraphSize}\n`));
+
+      console.log(chalk.cyan('Most Central Files:'));
+      if (central.length === 0) {
+        console.log(chalk.gray('  No dependency data yet\n'));
+      } else {
+        central.forEach((dep, idx) => {
+          console.log(`  ${idx + 1}. ${path.relative(process.cwd(), dep.filePath)}`);
+          console.log(chalk.gray(`     Imported by ${dep.importedBy.size} files, imports ${dep.imports.size} files`));
+          console.log(chalk.gray(`     Centrality score: ${dep.dependencyScore}`));
+        });
+        console.log();
+      }
+
       rl.prompt();
       return;
     }

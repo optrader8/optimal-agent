@@ -6,6 +6,7 @@ import { IContextManager } from '../interfaces/IContextManager.js';
 import { Message, Context } from '../types.js';
 import { ContextModel, ToolExecutionRecord } from '../models/ContextModel.js';
 import { ImportanceScorer } from '../utils/importance-scorer.js';
+import { FileTracker, FileSuggestion } from './FileTracker.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -13,10 +14,12 @@ export class ContextManager implements IContextManager {
   private contexts: Map<string, ContextModel> = new Map();
   private sessionsDir: string;
   private importanceScorer: ImportanceScorer;
+  private fileTracker: FileTracker;
 
-  constructor(sessionsDir: string = './.sessions') {
+  constructor(sessionsDir: string = './.sessions', fileTracker?: FileTracker) {
     this.sessionsDir = sessionsDir;
     this.importanceScorer = new ImportanceScorer();
+    this.fileTracker = fileTracker || new FileTracker();
     this.ensureSessionsDir();
   }
 
@@ -171,12 +174,20 @@ export class ContextManager implements IContextManager {
   /**
    * Track a file mention in conversation
    */
-  async trackFileMention(sessionId: string, filePath: string): Promise<void> {
+  async trackFileMention(sessionId: string, filePath: string, operation: 'read' | 'write' | 'edit' = 'read'): Promise<void> {
     const context = this.contexts.get(sessionId);
 
     if (context) {
       context.trackFileMention(filePath);
     }
+
+    // Track file access in FileTracker
+    this.fileTracker.trackAccess(filePath, operation);
+
+    // Analyze file dependencies asynchronously
+    this.fileTracker.analyzeDependencies(filePath).catch(() => {
+      // Ignore errors in dependency analysis
+    });
   }
 
   /**
@@ -312,5 +323,70 @@ export class ContextManager implements IContextManager {
       console.error(`Failed to delete session ${sessionId}:`, error);
       return false;
     }
+  }
+
+  /**
+   * Get file suggestions based on current context
+   */
+  async getFileSuggestions(sessionId: string, currentFile?: string, limit: number = 5): Promise<FileSuggestion[]> {
+    if (currentFile) {
+      return this.fileTracker.suggestRelatedFiles(currentFile, limit);
+    }
+
+    // If no current file, suggest from conversation focus
+    const focus = await this.getConversationFocus(sessionId);
+    if (focus.length > 0) {
+      return this.fileTracker.suggestRelatedFiles(focus[0], limit);
+    }
+
+    // Otherwise return working set
+    const workingSet = this.fileTracker.getWorkingSet();
+    return workingSet.slice(0, limit).map(file => ({
+      filePath: file,
+      reason: 'In current working set',
+      confidence: 0.7,
+    }));
+  }
+
+  /**
+   * Get current working set
+   */
+  getWorkingSet(): string[] {
+    return this.fileTracker.getWorkingSet();
+  }
+
+  /**
+   * Get most accessed files
+   */
+  getMostAccessedFiles(limit: number = 10) {
+    return this.fileTracker.getMostAccessedFiles(limit);
+  }
+
+  /**
+   * Get recently accessed files
+   */
+  getRecentlyAccessedFiles(limit: number = 10) {
+    return this.fileTracker.getRecentlyAccessedFiles(limit);
+  }
+
+  /**
+   * Get central files in dependency graph
+   */
+  getCentralFiles(limit: number = 10) {
+    return this.fileTracker.getCentralFiles(limit);
+  }
+
+  /**
+   * Get file tracker statistics
+   */
+  getFileTrackerStats() {
+    return this.fileTracker.getStatistics();
+  }
+
+  /**
+   * Get file tracker instance
+   */
+  getFileTracker(): FileTracker {
+    return this.fileTracker;
   }
 }
