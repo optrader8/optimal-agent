@@ -160,7 +160,8 @@ async function main() {
   });
 
   console.log(chalk.gray('Type your message or "exit" to quit.'));
-  console.log(chalk.gray('Special commands: /health, /errors, /clear-errors, /history, /backups, /rollback <file>\n'));
+  console.log(chalk.gray('Special commands: /health, /errors, /clear-errors, /history, /backups, /rollback <file>'));
+  console.log(chalk.gray('Monitoring: /stats [tool], /executions, /slowest, /failures, /active\n'));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -266,6 +267,125 @@ async function main() {
         console.log(chalk.red(`❌ Failed to rollback ${filePath}\n`));
       }
 
+      rl.prompt();
+      return;
+    }
+
+    // Performance stats
+    if (input.toLowerCase().startsWith('/stats')) {
+      const executionMonitor = toolExecutor.getExecutionMonitor();
+      const parts = input.split(' ');
+      const toolName = parts[1]?.trim();
+
+      if (toolName) {
+        // Show stats for specific tool
+        const stats = executionMonitor.getToolPerformance(toolName);
+        if (stats) {
+          console.log('\n' + executionMonitor.formatPerformanceStats(stats));
+        } else {
+          console.log(chalk.red(`\n❌ No execution data for tool: ${toolName}\n`));
+        }
+      } else {
+        // Show stats for all tools
+        const allStats = executionMonitor.getAllPerformanceStats();
+        if (allStats.length === 0) {
+          console.log(chalk.green('\n✓ No execution statistics available\n'));
+        } else {
+          console.log(chalk.yellow(`\n📊 Performance Statistics (${allStats.length} tools):\n`));
+          allStats.slice(0, 10).forEach((stats) => {
+            console.log(executionMonitor.formatPerformanceStats(stats));
+          });
+        }
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Recent executions
+    if (input.toLowerCase() === '/executions') {
+      const executionMonitor = toolExecutor.getExecutionMonitor();
+      const executions = executionMonitor.getExecutionHistory(20);
+
+      if (executions.length === 0) {
+        console.log(chalk.green('\n✓ No execution history\n'));
+      } else {
+        console.log(chalk.yellow(`\nRecent Executions (${executions.length}):\n`));
+        executions.reverse().forEach((exec, idx) => {
+          const status = exec.success ? chalk.green('✓') : chalk.red('✗');
+          const duration = exec.duration ? `${exec.duration.toFixed(2)}ms` : 'N/A';
+          console.log(`${status} ${exec.toolName} - ${duration}`);
+          console.log(`   Time: ${exec.startTime.toLocaleTimeString()}`);
+          if (exec.error) {
+            console.log(`   Error: ${exec.error}`);
+          }
+          console.log();
+        });
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Slowest executions
+    if (input.toLowerCase() === '/slowest') {
+      const executionMonitor = toolExecutor.getExecutionMonitor();
+      const slowest = executionMonitor.getSlowestExecutions(10);
+
+      if (slowest.length === 0) {
+        console.log(chalk.green('\n✓ No execution history\n'));
+      } else {
+        console.log(chalk.yellow(`\nSlowest Executions (${slowest.length}):\n`));
+        slowest.forEach((exec, idx) => {
+          console.log(`${idx + 1}. ${exec.toolName} - ${exec.duration?.toFixed(2)}ms`);
+          console.log(`   Time: ${exec.startTime.toLocaleTimeString()}`);
+          console.log();
+        });
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Recent failures
+    if (input.toLowerCase() === '/failures') {
+      const executionMonitor = toolExecutor.getExecutionMonitor();
+      const failures = executionMonitor.getRecentFailures(10);
+
+      if (failures.length === 0) {
+        console.log(chalk.green('\n✓ No recent failures\n'));
+      } else {
+        console.log(chalk.yellow(`\nRecent Failures (${failures.length}):\n`));
+        failures.forEach((exec, idx) => {
+          console.log(`${idx + 1}. ${exec.toolName}`);
+          console.log(`   Time: ${exec.startTime.toLocaleTimeString()}`);
+          if (exec.error) {
+            console.log(`   Error: ${exec.error}`);
+          }
+          if (exec.timedOut) {
+            console.log(chalk.red('   ⏱️  TIMED OUT'));
+          }
+          if (exec.cancelled) {
+            console.log(chalk.yellow('   🚫 CANCELLED'));
+          }
+          console.log();
+        });
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Active executions
+    if (input.toLowerCase() === '/active') {
+      const executionMonitor = toolExecutor.getExecutionMonitor();
+      const active = executionMonitor.getActiveExecutions();
+
+      if (active.length === 0) {
+        console.log(chalk.green('\n✓ No active executions\n'));
+      } else {
+        console.log(chalk.yellow(`\nActive Executions (${active.length}):\n`));
+        active.forEach((execId, idx) => {
+          console.log(`${idx + 1}. ${execId}`);
+        });
+        console.log(chalk.gray('\nUse /cancel <execution_id> to cancel an execution\n'));
+      }
       rl.prompt();
       return;
     }
