@@ -1,10 +1,10 @@
 /**
- * Context Manager implementation
+ * Context Manager implementation with enhanced multi-turn support
  */
 
 import { IContextManager } from '../interfaces/IContextManager.js';
 import { Message, Context } from '../types.js';
-import { ContextModel } from '../models/ContextModel.js';
+import { ContextModel, ToolExecutionRecord } from '../models/ContextModel.js';
 
 export class ContextManager implements IContextManager {
   private contexts: Map<string, ContextModel> = new Map();
@@ -88,5 +88,76 @@ export class ContextManager implements IContextManager {
    */
   async clearContext(sessionId: string): Promise<void> {
     this.contexts.delete(sessionId);
+  }
+
+  /**
+   * Record a tool execution for multi-turn tracking
+   */
+  async recordToolExecution(
+    sessionId: string,
+    toolName: string,
+    parameters: Record<string, any>,
+    success: boolean,
+    output?: string
+  ): Promise<void> {
+    const context = this.contexts.get(sessionId);
+
+    if (context) {
+      context.recordToolExecution(toolName, parameters, success, output);
+    }
+  }
+
+  /**
+   * Track a file mention in conversation
+   */
+  async trackFileMention(sessionId: string, filePath: string): Promise<void> {
+    const context = this.contexts.get(sessionId);
+
+    if (context) {
+      context.trackFileMention(filePath);
+    }
+  }
+
+  /**
+   * Get conversation focus (files currently being discussed)
+   */
+  async getConversationFocus(sessionId: string): Promise<string[]> {
+    const context = this.contexts.get(sessionId);
+    return context?.conversationFocus || [];
+  }
+
+  /**
+   * Get recent tool execution history
+   */
+  async getRecentToolExecutions(sessionId: string): Promise<ToolExecutionRecord[]> {
+    const context = this.contexts.get(sessionId);
+    return context?.recentToolExecutions || [];
+  }
+
+  /**
+   * Get context summary for the model
+   */
+  async getContextSummary(sessionId: string): Promise<string> {
+    const context = this.contexts.get(sessionId);
+    return context?.getContextSummary() || '';
+  }
+
+  /**
+   * Clear conversation focus
+   */
+  async clearFocus(sessionId: string): Promise<void> {
+    const context = this.contexts.get(sessionId);
+
+    if (context) {
+      context.clearFocus();
+    }
+  }
+
+  /**
+   * Get all mentioned files in the session
+   */
+  async getMentionedFiles(sessionId: string): Promise<string[]> {
+    const context = this.contexts.get(sessionId);
+    return context ? Array.from(context.mentionedFiles) : [];
   }
 }

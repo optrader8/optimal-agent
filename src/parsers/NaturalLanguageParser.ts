@@ -56,8 +56,10 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseReadFile(text: string): ToolCall | null {
     const patterns = [
-      /(?:read|open|show|display|view)\s+(?:the\s+)?(?:file|content)\s+(?:at\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /(?:I\s+)?(?:need\s+to|will|let me|going to)\s+read\s+(?:the\s+)?(?:file\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:read|open|show|display|view)\s+(?:the\s+)?(?:file|content)\s+(?:at\s+)?['"`]([^'"`]+)['"`]/i,
+      /(?:read|open|show|display|view)\s+(?:the\s+)?(?:file|content)\s+(?:at\s+)?([\w\-./]+\.\w+)/i,
+      /(?:I\s+)?(?:need\s+to|will|let me|going to)\s+read\s+(?:the\s+)?(?:file\s+)?['"`]([^'"`]+)['"`]/i,
+      /(?:I\s+)?(?:need\s+to|will|let me|going to)\s+read\s+(?:the\s+)?(?:file\s+)?([\w\-./]+\.\w+)/i,
     ];
 
     for (const pattern of patterns) {
@@ -109,6 +111,7 @@ export class NaturalLanguageParser implements IParser {
     const patterns = [
       /(?:list|show|display)\s+(?:the\s+)?(?:directory|folder|files)\s+(?:at\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
       /(?:what's|what is)\s+in\s+(?:the\s+)?(?:directory|folder)\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:show|display)\s+(?:me\s+)?(?:the\s+)?(?:directory|folder)\s+structure/i,
     ];
 
     for (const pattern of patterns) {
@@ -116,7 +119,7 @@ export class NaturalLanguageParser implements IParser {
       if (match) {
         return new ToolCallModel(
           'list_directory',
-          { path: match[1].trim() },
+          { path: match[1]?.trim() || '.' },
           0.8,
           match[0]
         );
@@ -158,9 +161,10 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseRunCommand(text: string): ToolCall | null {
     const patterns = [
-      /(?:run|execute)\s+(?:the\s+)?(?:command|shell)\s+['"`]([^'"`]+?)['"`]/i,
-      /(?:I\s+)?(?:will|need to|let me)\s+run\s+['"`]([^'"`]+?)['"`]/i,
+      /(?:run|execute)\s+(?:the\s+)?(?:command|shell)\s+(?:command:?\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:I\s+)?(?:will|'ll|need to|let me)\s+run\s+['"`]([^'"`]+?)['"`]/i,
       /running\s+command:\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /execute\s+(?:shell\s+)?command:\s+(\w+)/i,
     ];
 
     for (const pattern of patterns) {
@@ -286,8 +290,9 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseFileStat(text: string): ToolCall | null {
     const patterns = [
-      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /fs\.stat\s*\(\s*['"`]([^'"`]+?)['"`]\s*\)/i,
+      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+['"`]([^'"`]+)['"`]/i,
+      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+([\w\-./]+\.\w+)/i,
+      /fs\.stat\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/i,
     ];
 
     for (const pattern of patterns) {
@@ -311,6 +316,7 @@ export class NaturalLanguageParser implements IParser {
   private parseRipgrep(text: string): ToolCall | null {
     const patterns = [
       /(?:ripgrep|rg)\s+['"`]([^'"`]+?)['"`]/i,
+      /(?:use\s+)?(?:ripgrep|rg)\s+(?:to\s+)?search\s+(?:for\s+)?['"`]([^'"`]+?)['"`]/i,
       /search\s+(?:with\s+)?(?:ripgrep|rg)\s+(?:for\s+)?['"`]([^'"`]+?)['"`]/i,
     ];
 
@@ -336,6 +342,7 @@ export class NaturalLanguageParser implements IParser {
     const patterns = [
       /find\s+(?:files?\s+)?(?:named|matching)\s+['"`]([^'"`]+?)['"`]/i,
       /(?:locate|search for)\s+files?\s+(?:named|called)\s+['"`]([^'"`]+?)['"`]/i,
+      /(?:locate|find)\s+(?:files?\s+)?(?:matching|called|named)\s+['"`]([^'"`]+?)['"`]/i,
     ];
 
     for (const pattern of patterns) {
@@ -381,6 +388,7 @@ export class NaturalLanguageParser implements IParser {
   private parseSed(text: string): ToolCall | null {
     const patterns = [
       /sed\s+['"`]([^'"`]+?)['"`]\s+['"`]([^'"`]+?)['"`]/i,
+      /sed\s+['"`]([^'"`\s]+?)['"`]\s+(\S+)/i,
     ];
 
     for (const pattern of patterns) {
@@ -403,8 +411,12 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseWc(text: string): ToolCall | null {
     const patterns = [
-      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /wc\s+(?:-[lwc]\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?['"`]([^'"`]+)['"`]/i,
+      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?([\w\-./]+\.\w+)/i,
+      /wc\s+(?:-[lwc]\s+)?['"`]([^'"`]+)['"`]/i,
+      /wc\s+(?:-[lwc]\s+)?([\w\-./]+\.\w+)/i,
+      /how\s+many\s+(?:lines|words)\s+(?:are\s+)?in\s+['"`]([^'"`]+)['"`]/i,
+      /how\s+many\s+(?:lines|words)\s+(?:are\s+)?in\s+([\w\-./]+\.\w+)/i,
     ];
 
     for (const pattern of patterns) {
