@@ -56,8 +56,10 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseReadFile(text: string): ToolCall | null {
     const patterns = [
-      /(?:read|open|show|display|view)\s+(?:the\s+)?(?:file|content)\s+(?:at\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /(?:I\s+)?(?:need\s+to|will|let me|going to)\s+read\s+(?:the\s+)?(?:file\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:read|open|show|display|view)\s+(?:the\s+)?(?:file|content)\s+(?:at\s+)?['"`]([^'"`]+)['"`]/i,
+      /(?:read|open|show|display|view)\s+(?:the\s+)?(?:file|content)\s+(?:at\s+)?([\w\-./]+\.\w+)/i,
+      /(?:I\s+)?(?:need\s+to|will|let me|going to)\s+read\s+(?:the\s+)?(?:file\s+)?['"`]([^'"`]+)['"`]/i,
+      /(?:I\s+)?(?:need\s+to|will|let me|going to)\s+read\s+(?:the\s+)?(?:file\s+)?([\w\-./]+\.\w+)/i,
     ];
 
     for (const pattern of patterns) {
@@ -288,8 +290,9 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseFileStat(text: string): ToolCall | null {
     const patterns = [
-      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /fs\.stat\s*\(\s*['"`]([^'"`]+?)['"`]\s*\)/i,
+      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+['"`]([^'"`]+)['"`]/i,
+      /(?:get|show|check)\s+(?:file\s+)?(?:stats?|info|metadata|details)\s+(?:for|of|on)\s+([\w\-./]+\.\w+)/i,
+      /fs\.stat\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/i,
     ];
 
     for (const pattern of patterns) {
@@ -408,9 +411,12 @@ export class NaturalLanguageParser implements IParser {
    */
   private parseWc(text: string): ToolCall | null {
     const patterns = [
-      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /wc\s+(?:-[lwc]\s+)?['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
-      /how\s+many\s+(?:lines|words)\s+(?:are\s+)?in\s+['"`]?([^'"`\n]+?)['"`]?(?:\s|$|\.)/i,
+      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?['"`]([^'"`]+)['"`]/i,
+      /(?:count|wc)\s+(?:lines|words|chars)?\s+(?:in\s+)?([\w\-./]+\.\w+)/i,
+      /wc\s+(?:-[lwc]\s+)?['"`]([^'"`]+)['"`]/i,
+      /wc\s+(?:-[lwc]\s+)?([\w\-./]+\.\w+)/i,
+      /how\s+many\s+(?:lines|words)\s+(?:are\s+)?in\s+['"`]([^'"`]+)['"`]/i,
+      /how\s+many\s+(?:lines|words)\s+(?:are\s+)?in\s+([\w\-./]+\.\w+)/i,
     ];
 
     for (const pattern of patterns) {
