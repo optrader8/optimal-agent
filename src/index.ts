@@ -34,6 +34,10 @@ import { ApplyDiffTool } from './tools/ApplyDiffTool.js';
 import { RunCommandTool } from './tools/RunCommandTool.js';
 import { NodeEvalTool } from './tools/NodeEvalTool.js';
 
+// Testing and diagnostics tools
+import { RunTestsTool } from './tools/RunTestsTool.js';
+import { GetDiagnosticsTool } from './tools/GetDiagnosticsTool.js';
+
 import { defaultModelConfig, defaultSystemConfig } from './config.js';
 import readline from 'readline';
 import chalk from 'chalk';
@@ -95,6 +99,10 @@ async function main() {
   // Execution tools
   toolExecutor.registerTool(new RunCommandTool());
   toolExecutor.registerTool(new NodeEvalTool());
+
+  // Testing and diagnostics
+  toolExecutor.registerTool(new RunTestsTool());
+  toolExecutor.registerTool(new GetDiagnosticsTool());
 
   console.log(
     chalk.green(`✓ Registered ${toolExecutor.getAvailableTools().length} tools`)

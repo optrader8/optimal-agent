@@ -25,6 +25,10 @@ export class ContextModel implements IContext {
   conversationFocus: string[];
   lastToolResults: Map<string, string>;
 
+  // Working set management (9.3)
+  workingSet: Map<string, { accessCount: number; lastAccess: Date }>;
+  fileCache: Map<string, { content: string; timestamp: Date }>;
+
   constructor(workingDirectory: string = process.cwd()) {
     this.messages = [];
     this.currentFiles = [];
@@ -37,6 +41,10 @@ export class ContextModel implements IContext {
     this.recentToolExecutions = [];
     this.conversationFocus = [];
     this.lastToolResults = new Map();
+
+    // Initialize working set management
+    this.workingSet = new Map();
+    this.fileCache = new Map();
   }
 
   /**
@@ -50,7 +58,7 @@ export class ContextModel implements IContext {
   /**
    * Update token count
    */
-  private updateTokenCount(): void {
+  updateTokenCount(): void {
     this.tokenCount = this.messages.reduce((sum, msg) => {
       // Rough estimate: ~4 characters per token
       return sum + Math.ceil(msg.content.length / 4);
@@ -89,6 +97,20 @@ export class ContextModel implements IContext {
       workingDirectory: this.workingDirectory,
       sessionState: this.sessionState,
       tokenCount: this.tokenCount,
+      mentionedFiles: Array.from(this.mentionedFiles),
+      recentToolExecutions: this.recentToolExecutions,
+      conversationFocus: this.conversationFocus,
+      lastToolResults: Object.fromEntries(this.lastToolResults),
+      workingSet: Array.from(this.workingSet.entries()).map(([path, data]) => ({
+        path,
+        accessCount: data.accessCount,
+        lastAccess: data.lastAccess.toISOString(),
+      })),
+      fileCache: Array.from(this.fileCache.entries()).map(([path, data]) => ({
+        path,
+        content: data.content,
+        timestamp: data.timestamp.toISOString(),
+      })),
     };
   }
 
@@ -105,6 +127,33 @@ export class ContextModel implements IContext {
     context.recentToolExecutions = json.recentToolExecutions || [];
     context.conversationFocus = json.conversationFocus || [];
     context.lastToolResults = new Map(Object.entries(json.lastToolResults || {}));
+
+    // Restore working set
+    if (json.workingSet) {
+      context.workingSet = new Map(
+        json.workingSet.map((item: any) => [
+          item.path,
+          {
+            accessCount: item.accessCount,
+            lastAccess: new Date(item.lastAccess),
+          },
+        ])
+      );
+    }
+
+    // Restore file cache
+    if (json.fileCache) {
+      context.fileCache = new Map(
+        json.fileCache.map((item: any) => [
+          item.path,
+          {
+            content: item.content,
+            timestamp: new Date(item.timestamp),
+          },
+        ])
+      );
+    }
+
     return context;
   }
 
@@ -206,5 +255,94 @@ export class ContextModel implements IContext {
    */
   clearFocus(): void {
     this.conversationFocus = [];
+  }
+
+  /**
+   * Track file access in working set
+   */
+  trackFileAccess(filePath: string): void {
+    const existing = this.workingSet.get(filePath);
+    if (existing) {
+      existing.accessCount++;
+      existing.lastAccess = new Date();
+    } else {
+      this.workingSet.set(filePath, {
+        accessCount: 1,
+        lastAccess: new Date(),
+      });
+    }
+
+    // Keep working set manageable (top 20 most accessed files)
+    if (this.workingSet.size > 20) {
+      // Remove least recently accessed file
+      let leastRecent: string | null = null;
+      let leastRecentTime = new Date();
+
+      for (const [path, data] of this.workingSet.entries()) {
+        if (data.lastAccess < leastRecentTime) {
+          leastRecentTime = data.lastAccess;
+          leastRecent = path;
+        }
+      }
+
+      if (leastRecent) {
+        this.workingSet.delete(leastRecent);
+        this.fileCache.delete(leastRecent);
+      }
+    }
+  }
+
+  /**
+   * Get working set (frequently accessed files)
+   */
+  getWorkingSet(): Array<{ path: string; accessCount: number; lastAccess: Date }> {
+    return Array.from(this.workingSet.entries())
+      .map(([path, data]) => ({ path, ...data }))
+      .sort((a, b) => b.accessCount - a.accessCount);
+  }
+
+  /**
+   * Cache file content
+   */
+  cacheFile(filePath: string, content: string): void {
+    this.fileCache.set(filePath, {
+      content,
+      timestamp: new Date(),
+    });
+
+    // Keep cache size manageable (max 10 files)
+    if (this.fileCache.size > 10) {
+      const oldest = Array.from(this.fileCache.entries())
+        .sort((a, b) => a[1].timestamp.getTime() - b[1].timestamp.getTime())[0];
+
+      if (oldest) {
+        this.fileCache.delete(oldest[0]);
+      }
+    }
+  }
+
+  /**
+   * Get cached file content if available and recent
+   */
+  getCachedFile(filePath: string, maxAgeMs: number = 60000): string | null {
+    const cached = this.fileCache.get(filePath);
+    if (!cached) {
+      return null;
+    }
+
+    const age = Date.now() - cached.timestamp.getTime();
+    if (age > maxAgeMs) {
+      this.fileCache.delete(filePath);
+      return null;
+    }
+
+    return cached.content;
+  }
+
+  /**
+   * Clear file cache
+   */
+  clearFileCache(): void {
+    this.fileCache.clear();
   }
 }

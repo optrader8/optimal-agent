@@ -39,6 +39,8 @@ export class NaturalLanguageParser implements IParser {
       this.parseEditFile.bind(this),
       this.parseGetFileOutline.bind(this),
       this.parseApplyDiff.bind(this),
+      this.parseRunTests.bind(this),
+      this.parseGetDiagnostics.bind(this),
     ];
 
     for (const parser of parsers) {
@@ -479,6 +481,81 @@ export class NaturalLanguageParser implements IParser {
             match[0]
           );
         }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse run_tests patterns
+   */
+  private parseRunTests(text: string): ToolCall | null {
+    const patterns = [
+      /(?:run|execute)\s+(?:the\s+)?tests?/i,
+      /test\s+(?:the\s+)?(?:code|project|application)/i,
+      /npm\s+(?:run\s+)?test/i,
+      /(?:run|execute)\s+(?:jest|mocha|vitest|pytest)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: Record<string, any> = {};
+
+        // Extract test path if mentioned
+        const pathMatch = text.match(/(?:tests?|spec)\s+(?:in|for|at)\s+['"`]?([^'"`\s]+)['"`]?/i);
+        if (pathMatch) {
+          params.path = pathMatch[1];
+        }
+
+        // Check for coverage request
+        if (text.match(/with\s+coverage|--coverage/i)) {
+          params.coverage = true;
+        }
+
+        return new ToolCallModel('run_tests', params, 0.8, match[0]);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse get_diagnostics patterns
+   */
+  private parseGetDiagnostics(text: string): ToolCall | null {
+    const patterns = [
+      /(?:run|get|show|check)\s+(?:code\s+)?(?:diagnostics?|linting|type\s*check)/i,
+      /(?:lint|check)\s+(?:the\s+)?(?:code|files?)/i,
+      /(?:run|execute)\s+(?:eslint|tsc|type\s*script)/i,
+      /check\s+for\s+(?:errors?|issues?|problems?)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const params: Record<string, any> = {};
+
+        // Extract diagnostic type
+        if (text.match(/lint|eslint/i)) {
+          params.type = 'lint';
+        } else if (text.match(/type|tsc|typescript/i)) {
+          params.type = 'typecheck';
+        }
+
+        // Check for auto-fix request
+        if (text.match(/fix|--fix/i)) {
+          params.fix = true;
+        }
+
+        // Extract path if mentioned
+        const pathMatch = text.match(/(?:in|for|at)\s+['"`]?([^'"`\s]+)['"`]?/i);
+        if (pathMatch && !pathMatch[1].match(/errors?|issues?|problems?/i)) {
+          params.path = pathMatch[1];
+        }
+
+        return new ToolCallModel('get_diagnostics', params, 0.8, match[0]);
       }
     }
 

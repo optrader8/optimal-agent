@@ -5,9 +5,31 @@
 import { IContextManager } from '../interfaces/IContextManager.js';
 import { Message, Context } from '../types.js';
 import { ContextModel, ToolExecutionRecord } from '../models/ContextModel.js';
+import { ImportanceScorer } from '../utils/importance-scorer.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 export class ContextManager implements IContextManager {
   private contexts: Map<string, ContextModel> = new Map();
+  private sessionsDir: string;
+  private importanceScorer: ImportanceScorer;
+
+  constructor(sessionsDir: string = './.sessions') {
+    this.sessionsDir = sessionsDir;
+    this.importanceScorer = new ImportanceScorer();
+    this.ensureSessionsDir();
+  }
+
+  /**
+   * Ensure sessions directory exists
+   */
+  private async ensureSessionsDir(): Promise<void> {
+    try {
+      await fs.mkdir(this.sessionsDir, { recursive: true });
+    } catch (error) {
+      console.error('Failed to create sessions directory:', error);
+    }
+  }
 
   /**
    * Add a message to the context
@@ -49,7 +71,7 @@ export class ContextManager implements IContextManager {
   }
 
   /**
-   * Compress context to fit within token limit
+   * Compress context to fit within token limit using importance scoring
    */
   async compressContext(
     sessionId: string,
@@ -61,9 +83,48 @@ export class ContextManager implements IContextManager {
       return;
     }
 
-    // Simple compression: keep only the most recent messages
-    const targetCount = Math.floor(context.messages.length * compressionRatio);
-    context.messages = context.messages.slice(-targetCount);
+    // Score all messages by importance
+    const totalMessages = context.messages.length;
+    const scoredMessages = context.messages.map((msg, idx) => {
+      const score = this.importanceScorer.scoreMessage(msg, {
+        position: idx / Math.max(totalMessages - 1, 1),
+        totalMessages,
+        hasToolCalls: msg.content.includes('[Tool:') || msg.content.includes('read_file') || msg.content.includes('write_file'),
+        toolCallResults: msg.role === 'assistant' ? [msg.content] : undefined,
+      });
+
+      return { message: msg, score: score.score };
+    });
+
+    // Target token count based on compression ratio
+    const currentTokens = context.tokenCount;
+    const targetTokens = Math.floor(currentTokens * compressionRatio);
+
+    // Select most important messages within token budget
+    const selected = this.importanceScorer.selectImportantMessages(
+      scoredMessages,
+      targetTokens
+    );
+
+    context.messages = selected;
+    context.updateTokenCount();
+  }
+
+  /**
+   * Intelligent context compression with priority-based selection
+   */
+  async compressContextIntelligent(
+    sessionId: string,
+    maxTokens: number
+  ): Promise<void> {
+    const context = this.contexts.get(sessionId);
+
+    if (!context || context.tokenCount <= maxTokens) {
+      return;
+    }
+
+    const compressionRatio = maxTokens / context.tokenCount;
+    await this.compressContext(sessionId, compressionRatio);
   }
 
   /**
@@ -159,5 +220,97 @@ export class ContextManager implements IContextManager {
   async getMentionedFiles(sessionId: string): Promise<string[]> {
     const context = this.contexts.get(sessionId);
     return context ? Array.from(context.mentionedFiles) : [];
+  }
+
+  /**
+   * Save session to disk for persistence
+   */
+  async saveSession(sessionId: string): Promise<boolean> {
+    const context = this.contexts.get(sessionId);
+    if (!context) {
+      return false;
+    }
+
+    try {
+      await this.ensureSessionsDir();
+
+      const sessionFile = path.join(this.sessionsDir, `${sessionId}.json`);
+      const sessionData = {
+        sessionId,
+        timestamp: new Date().toISOString(),
+        context: context.toJSON(),
+      };
+
+      await fs.writeFile(sessionFile, JSON.stringify(sessionData, null, 2), 'utf-8');
+      return true;
+    } catch (error) {
+      console.error(`Failed to save session ${sessionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Load session from disk
+   */
+  async loadSession(sessionId: string): Promise<boolean> {
+    try {
+      const sessionFile = path.join(this.sessionsDir, `${sessionId}.json`);
+      const data = await fs.readFile(sessionFile, 'utf-8');
+      const sessionData = JSON.parse(data);
+
+      const context = ContextModel.fromJSON(sessionData.context);
+      this.contexts.set(sessionId, context);
+
+      return true;
+    } catch (error) {
+      console.error(`Failed to load session ${sessionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * List all saved sessions
+   */
+  async listSessions(): Promise<Array<{ sessionId: string; timestamp: string }>> {
+    try {
+      await this.ensureSessionsDir();
+      const files = await fs.readdir(this.sessionsDir);
+      const sessions = [];
+
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          try {
+            const data = await fs.readFile(path.join(this.sessionsDir, file), 'utf-8');
+            const sessionData = JSON.parse(data);
+            sessions.push({
+              sessionId: sessionData.sessionId,
+              timestamp: sessionData.timestamp,
+            });
+          } catch (error) {
+            // Skip invalid session files
+            continue;
+          }
+        }
+      }
+
+      return sessions.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    } catch (error) {
+      console.error('Failed to list sessions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Delete saved session file
+   */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const sessionFile = path.join(this.sessionsDir, `${sessionId}.json`);
+      await fs.unlink(sessionFile);
+      return true;
+    } catch (error) {
+      console.error(`Failed to delete session ${sessionId}:`, error);
+      return false;
+    }
   }
 }

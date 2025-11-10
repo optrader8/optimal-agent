@@ -4,6 +4,8 @@
 
 import { ToolResult } from '../types.js';
 
+export type { ToolResult };
+
 export interface ITool {
   /**
    * Tool name
