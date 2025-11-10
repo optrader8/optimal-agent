@@ -47,6 +47,7 @@ import { HealthMonitor } from './errors/HealthMonitor.js';
 import { globalBackupManager } from './utils/backup-manager.js';
 import { globalConfigManager } from './config/ConfigManager.js';
 import { globalSystemChecker } from './config/SystemChecker.js';
+import { globalFileCache, globalSearchCache } from './performance/Cache.js';
 import readline from 'readline';
 import chalk from 'chalk';
 
@@ -170,7 +171,8 @@ async function main() {
   console.log(chalk.gray('Type your message or "exit" to quit.'));
   console.log(chalk.gray('Special commands: /health, /errors, /clear-errors, /history, /backups, /rollback <file>'));
   console.log(chalk.gray('Monitoring: /stats [tool], /executions, /slowest, /failures, /active'));
-  console.log(chalk.gray('Configuration: /config, /models, /tools, /check-system\n'));
+  console.log(chalk.gray('Configuration: /config, /models, /tools, /check-system'));
+  console.log(chalk.gray('Performance: /cache-stats, /clear-cache\n'));
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -490,6 +492,33 @@ async function main() {
       console.log(chalk.yellow('\nChecking system requirements...\n'));
       const requirements = await globalSystemChecker.checkSystemRequirements();
       console.log(globalSystemChecker.formatReport(requirements));
+      rl.prompt();
+      return;
+    }
+
+    // Cache statistics
+    if (input.toLowerCase() === '/cache-stats') {
+      const fileStats = globalFileCache.getStats();
+      const searchStats = globalSearchCache.getStats();
+
+      console.log(chalk.yellow('\n📦 Cache Statistics:\n'));
+      console.log(chalk.cyan('File Cache:'));
+      console.log(`  Size: ${fileStats.size}/${fileStats.maxSize}`);
+      console.log(`  TTL: ${(fileStats.ttl / 1000).toFixed(0)}s\n`);
+
+      console.log(chalk.cyan('Search Cache:'));
+      console.log(`  Size: ${searchStats.size}/${searchStats.maxSize}`);
+      console.log(`  TTL: ${(searchStats.ttl / 1000).toFixed(0)}s\n`);
+
+      rl.prompt();
+      return;
+    }
+
+    // Clear cache
+    if (input.toLowerCase() === '/clear-cache') {
+      globalFileCache.clear();
+      globalSearchCache.clear();
+      console.log(chalk.green('\n✓ All caches cleared\n'));
       rl.prompt();
       return;
     }

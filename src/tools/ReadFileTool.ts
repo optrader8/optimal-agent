@@ -7,6 +7,7 @@ import { ToolResult } from '../types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { validateFilePath, sanitizeFilePath } from '../utils/validation.js';
+import { globalFileCache } from '../performance/Cache.js';
 
 export class ReadFileTool implements ITool {
   name = 'read_file';
@@ -16,6 +17,11 @@ export class ReadFileTool implements ITool {
       type: 'string',
       description: 'Path to the file to read',
       required: true,
+    },
+    useCache: {
+      type: 'boolean',
+      description: 'Use cached content if available (default: true)',
+      required: false,
     },
   };
 
@@ -36,9 +42,12 @@ export class ReadFileTool implements ITool {
 
       // Sanitize and resolve path
       const filePath = sanitizeFilePath(params.path);
+      const useCache = params.useCache !== false;
 
-      // Read file
-      const content = await fs.readFile(filePath, 'utf-8');
+      // Read file (with caching if enabled)
+      const content = useCache
+        ? await globalFileCache.get(filePath)
+        : await fs.readFile(filePath, 'utf-8');
 
       return {
         success: true,
