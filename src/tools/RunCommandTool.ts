@@ -13,7 +13,7 @@ const execAsync = promisify(exec);
 export class RunCommandTool implements ITool {
   name = 'run_command';
   description = 'Execute a shell command';
-  parameters: Record<string, ToolParameter } = {
+  parameters: Record<string, ToolParameter> = {
     command: {
       type: 'string',
       description: 'Command to execute',

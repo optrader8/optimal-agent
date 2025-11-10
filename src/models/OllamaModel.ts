@@ -26,7 +26,7 @@ export class OllamaModel implements ILocalModel {
         throw new Error(`Failed to connect to Ollama: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       const models = data.models || [];
       const modelExists = models.some((m: any) => m.name === modelName);
 
@@ -89,7 +89,7 @@ export class OllamaModel implements ILocalModel {
         throw new Error(`Ollama API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       return data.message?.content || '';
     } catch (error) {
       console.error('Failed to generate response:', error);

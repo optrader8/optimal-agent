@@ -34,7 +34,7 @@ export class OpenAICompatibleModel implements ILocalModel {
         return false;
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       console.log('Available models:', data.data?.map((m: any) => m.id) || []);
 
       this.currentModel = modelName;
@@ -92,7 +92,7 @@ export class OpenAICompatibleModel implements ILocalModel {
         throw new Error(`API error (${response.status}): ${errorText}`);
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       console.log('[API Response] Received');
 
       if (!data.choices || data.choices.length === 0) {
